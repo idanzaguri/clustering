@@ -143,9 +143,3 @@ def netlist2igraph(directed = False, multiple_edges = False , inputs_as_verticie
             g = g.subgraph( clusters[ clusters_size.index(max(clusters_size)) ] , implementation="create_from_scratch")
 
     return g
-
-def delete_dummy_vertices(graph):
-    new_graph = deepcopy(graph)
-    dummy_vertices = [ vid.index for vid in new_graph.vs.select(gateid=-1)]
-    new_graph.delete_vertices( dummy_vertices )
-    return new_graph

@@ -90,51 +90,55 @@ def clustering_report(graph, clustering, gl_clustering=None):
         
             
 def export_to_gephi(g, clustering, gl_clustering, filename):
-    
-    # This code could potentially helps some layout algorithm to converge into the selected 'clustering'.
-    # However, some fine tuning is needed
-    # cluster_crossing_edges = clustering.crossing()
-    # graph.es["dummy_weight"] = [1+9999*cross for cross in cluster_crossing_edges]
+    # adding coordinates for Gephi GeoLayout plugin (ypos,xpos)
  
     num_of_clusters = len(clustering)
     largest_cluster = max( [ len(cluster) for cluster in clustering ] )
 
-    intra_cluster_size = math.ceil(math.sqrt(largest_cluster))
-    inter_cluster_size = math.ceil(math.sqrt(num_of_clusters))
-    margin = intra_cluster_size*3
+    cluster_side_length = math.ceil(math.sqrt(largest_cluster))
+    inter_cluster_size  = math.ceil(math.sqrt(num_of_clusters))
 
     for i, cluster in enumerate(clustering):
         cluster_pos = (int(i/inter_cluster_size), i%inter_cluster_size)
-        for j, vid in enumerate(cluster):
-            v_pos = (int( (j)/intra_cluster_size), (j)%intra_cluster_size)
-            g.vs[vid]["ypos"] = cluster_pos[0]*margin + v_pos[0]
-            g.vs[vid]["xpos"] = cluster_pos[1]*margin + v_pos[1]
+        for vertex_lpos, vid in enumerate(cluster):
+            v_pos = ( int( vertex_lpos/cluster_side_length ), vertex_lpos%cluster_side_length )
+            g.vs[vid]["ypos"] = cluster_pos[0]*2*cluster_side_length + v_pos[0]
+            g.vs[vid]["xpos"] = cluster_pos[1]*2*cluster_side_length + v_pos[1]
             g.vs[vid]["orig_cluster"] = get_gate_cluster(g.vs[vid]["label"])
             g.vs[vid]["expected_cluster"] = get_gate_cluster(g.vs[vid]["label"], gl_clustering)
-            g.vs[vid]["cluster"] = i
+            g.vs[vid]["cluster_id"] = i
     g.save(filename + ".gml")
+
+  
+
+
+def remove_dummies( graph, clustering = None):                    
+    dummy_vertices = [ v.index for v in graph.vs.select(gateid=-1)]
+    graph.delete_vertices( dummy_vertices )
+    if clustering:
+        return Clustering ( [cluster_id for cluster_id,set in enumerate(clustering) for vid in set if vid not in dummy_vertices] )
+
 
 
 def export_compressed_graph_to_gephi(graph, clustering, gl_clustering, filename):
-    g = copy.deepcopy(graph)
+    g = copy.deepcopy(graph)  
+    clustering = remove_dummies(g, clustering)
+
+    #
+    # In each cluster, collapse all vertices with the same gl_cluster into one vertex
+    #
+ 
+    # list of sorted numbers- L[a,b,c,...] where each compressed cluster i'th contains vids in [L[i-1],[i])  {L[0-1] = 0}
+    new_clustering = []
+    new_vid = 0
+    new_vertices = [-1]*g.vcount() # map original vertices to the compressed ones
 
     g.vs["expected_cluster"] = [ get_gate_cluster(g.vs[v.index]["label"], gl_clustering) for v in g.vs ]
 
-    new_clustering = []
-    new_vid = 0
-    new_vertices = [-1]*g.vcount()
-
-
-    counter = 0;
-    total = g.vcount();
-
-    for i, cluster in enumerate(clustering):
-        counter+=len(cluster)
-        print("@@@@ " + str(i) + " (+" + str(len(cluster)) + ")   " + str(counter) + "/" + str(total))
-
-        exp_clusters_in_set = set(g.vs[v]["expected_cluster"] for v in cluster)
-        #exp_clusters_in_set = set( get_gate_cluster(g.vs[v]["label"], gl_clustering) for v in cluster)
-
+    for i, cluster in enumerate(clustering):                
+        
+        # detect all expected clusters with elements in current cluser and make map from expected_cluster to new vid
+        exp_clusters_in_set = set(g.vs[v]["expected_cluster"] for v in cluster) 
         exp_cluster_to_new_vid = {cluster:i for i,cluster in enumerate(exp_clusters_in_set, start=new_vid)}
         new_vid += len(exp_cluster_to_new_vid)
         new_clustering.append(new_vid)
@@ -143,40 +147,55 @@ def export_compressed_graph_to_gephi(graph, clustering, gl_clustering, filename)
             new_vertices[vid] = exp_cluster_to_new_vid[g.vs[vid]["expected_cluster"]]
             
     assert -1 not in new_vertices, "for some reason at least one vertex was not compressed"
-        
-        
-    g.vs["size"] = 20
+
+    g.vs["size"] = 1
     if not g.is_weighted():
         g.es["weight"] = 1
-    
                        
-    #g.vs["label"] = g.vs["expected_cluster"]                                           
     g.contract_vertices(new_vertices ,combine_attrs=dict(label = "first", size = "sum"))
-    g.simplify(combine_edges=dict(weight="sum "))
+    g.simplify(combine_edges=dict(weight="sum"))
 
+
+    # adding coordinates for Gephi GeoLayout plugin (ypos,xpos)
     num_of_clusters = len(new_clustering)
     largest_cluster = max([ (new_clustering[i+1] - new_clustering[i]) for i in range(num_of_clusters-1) ] )
     
-    intra_cluster_size = math.ceil(math.sqrt(largest_cluster))
-    inter_cluster_size = math.ceil(math.sqrt(num_of_clusters))
-    margin = intra_cluster_size*2
+    cluster_side_length = math.ceil(math.sqrt(largest_cluster))
+    inter_cluster_size  = math.ceil(math.sqrt(num_of_clusters))
 
+    #print(cluster_side_length) # 3
+    #print(inter_cluster_size)  # 4
+    
     last_index = 0
     for i, index in enumerate(new_clustering):
-    
         cluster_pos = (int(i/inter_cluster_size), i%inter_cluster_size)
 
         for vid in range(last_index, index):
-            v_pos = (int( (vid-last_index)/intra_cluster_size), (vid-last_index)%intra_cluster_size)
-            g.vs[vid]["ypos"] = cluster_pos[0]*margin + v_pos[0]
-            g.vs[vid]["xpos"] = cluster_pos[1]*margin + v_pos[1]
-            g.vs[vid]["orig_cluster"] = get_gate_cluster(g.vs[vid]["label"])
+            vertex_lpos = vid-last_index # linear position
+            v_pos = ( int( vertex_lpos/cluster_side_length ), vertex_lpos%cluster_side_length )
+
+            g.vs[vid]["ypos"] = cluster_pos[0]*2*cluster_side_length + v_pos[0]
+            g.vs[vid]["xpos"] = cluster_pos[1]*2*cluster_side_length + v_pos[1]
             g.vs[vid]["expected_cluster"] = get_gate_cluster(g.vs[vid]["label"], gl_clustering)
-            g.vs[vid]["cluster"] = i
+            g.vs[vid]["label"] = g.vs[vid]["expected_cluster"]            
+            g.vs[vid]["cluster_id"] = i
+
         last_index = index
 
+    
+    # Generate scale sized vertices (inter-cluster and intra-cluster)
+    # value is in (0,1000] since Gephi can't read integer(1) and float(0.x) at the same column
+    
     hier = parse_netlist_clusters(print_heir=False, gl_clustering=gl_clustering)
     for v in g.vs:
-        v["size_scaled"] = v["size"] / hier[v["expected_cluster"]]
-        
+        v["inter_scaled"] = round( (v["size"] / hier[v["expected_cluster"]])*1000, 0)
+        assert v["inter_scaled"] <= 1000, "Unexpected scaling result"
+
+    for cid in range(num_of_clusters):
+        cluster_size = sum( [v["size"] for v in g.vs.select(cluster_id = cid)] )
+        for v in g.vs.select(cluster_id = cid):
+            v["intra_scaled"] = round( (v["size"] / cluster_size )*1000, 0)
+            assert v["intra_scaled"] <= 1000, "Unexpected scaling result"
+
     g.save(filename + "_compressed.gml")
+

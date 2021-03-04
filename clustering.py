@@ -27,14 +27,14 @@ if netlist.top_module.type == "top_earlgrey_KmacEnMasking1":
     level_0_hier_list = ['u_aes', 'u_alert_handler', 'u_clkmgr', 'u_csrng', 'u_dm_top', 'u_edn.', 'u_entropy_src', 'u_flash_ctrl', 'u_flash_eflash', 'u_gpio', 'u_hmac', 'u_keymgr', 'u_kmac', 'u_lc_ctrl', 'u_nmi_gen', 'u_otbn', 'u_otp_ctrl', 'u_padctrl', 'u_pinmux', 'u_pwrmgr', 'u_ram1p.*', 'u_rstmgr', 'u_rv_core_ibex', 'u_rv_plic', 'u_rv_timer', 'u_sensor_ctrl', 'u_spi_device', 'u_sram_ctrl_main', 'u_sram_ctrl_ret', 'u_tl_adapter.*', 'u_uart.*', 'u_usbdev', 'u_xbar_main', 'u_xbar_peri']
     clusters_span = range(4,40,1)
     compare_method = ['vi', 'nmi', 'split-join', 'rand', 'adjusted_rand']
-    clustering_alg = ['fastgreedy', 'DISABLED walktrap', 'DISABLED multilevel', 'DISABLED spinglass']
+    clustering_alg = ['fastgreedy', 'walktrap', 'multilevel', 'spinglass']
 
 # PicoRV32
 if netlist.top_module.type == "picorv32":
     level_0_hier_list = ['cpuregs' , 'genblk1.pcpi_mul' , 'genblk2.pcpi_div']
     clusters_span = range(2,30)
     compare_method = ['vi', 'nmi', 'split-join', 'rand', 'adjusted_rand']
-    clustering_alg = ['fastgreedy', 'walktrap', 'multilevel', 'spinglass']
+    clustering_alg = ['-fastgreedy', '-walktrap', '-multilevel', '-spinglass','-leading_eigenvector','label_propagation']
 
 # SweRV EH2
 if netlist.top_module.type == "eh2_swerv":
@@ -130,19 +130,37 @@ if 'walktrap' in clustering_alg:
         export_to_gephi                 (mygraph, clustering.as_clustering(clustering_size), expected_gl_clustering, "walktrap_" + str(clustering_size))
      
 
+
+if 'leading_eigenvector' in clustering_alg:
+    print("community_leading_eigenvector")
+    clustering = [mygraph.community_leading_eigenvector(n, weights=None) for n in clusters_span]
+    save_clustering(clustering, "leading_eigenvector") 
+    list_of_clustering = {}
+
+    for method in compare_method:    
+        cmp_res = [compare_communities(golden_clustering, c, method) for c in clustering]
+        print("%-15s (%2d) %.3f"%(method, clusters_span[cmp_res.index(max(cmp_res))], max(cmp_res) ))
+        list_of_clustering[ clusters_span[cmp_res.index(max(cmp_res))] ] = cmp_res.index(max(cmp_res))
+
+    for clustering_size in list_of_clustering.keys():
+        export_compressed_graph_to_gephi(mygraph, clustering[list_of_clustering[clustering_size]], expected_gl_clustering, "leading_eigenvector_" + str(clustering_size))
+        export_to_gephi                 (mygraph, clustering[list_of_clustering[clustering_size]], expected_gl_clustering, "leading_eigenvector_" + str(clustering_size))
+     
+
+
+if 'label_propagation' in clustering_alg:
+    print("community_label_propagation")
+    clustering = mygraph.community_label_propagation(weights=None, initial=None, fixed=None)
+    save_clustering(clustering, "label_propagation") 
+
+    for method in compare_method:    
+        cmp_res = compare_communities(golden_clustering, clustering, method)
+        print("%-15s (%2d) %.3f"%(method, len(clustering), cmp_res ))
+
+    export_compressed_graph_to_gephi(mygraph, clustering, expected_gl_clustering, "label_propagation_" + str(len(clustering)))
+    export_to_gephi                 (mygraph, clustering, expected_gl_clustering, "label_propagation_" + str(len(clustering)))
+     
+
+
 #split_module(mygraph, clustering, top)
 #x = mygraph.subgraph(vertices=clustering[0], implementation="create_from_scratch")
-
-# community_leading_eigenvector
-#if clustering_alg["leading_eigenvector"]:
-#    nmi = [compare_communities(golden_clustering, mygraph.community_leading_eigenvector(n, weights=None), "nmi") for n in clusters_span]
-#    print(  len(mygraph.community_leading_eigenvector(56, weights=None) )  )
-#    print( "community_leading_eigenvector({}) nmi={}".format(nmi.index(max(nmi))+2, max(nmi)) )
-#    clustering_results["leading_eigenvector"] = {"clustering": 1, "num_of_clusters": nmi.index(max(nmi))+2}
-# community_label_propagation
-#if clustering_alg["label_propagation"]:
-#    clustering = mygraph.community_label_propagation(weights=None, initial=None, fixed=None)
-#    nmi = compare_communities(golden_clustering, clustering, "nmi") 
-#    print( "community_label_propagation({}) nmi={}".format(len(clustering), nmi ) )
-#    #clustering_report(mygraph, clustering, expected_gl_clustering)
-#    clustering_results["label_propagation"] = clustering

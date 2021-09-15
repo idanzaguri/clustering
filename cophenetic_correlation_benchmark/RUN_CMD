@@ -1,0 +1,2 @@
+g++ -O3 -Wall -shared -std=c++14 -fPIC $(python3 -m pybind11 --includes) clustering.cpp -o clustering_module$(python3-config --extension-suffix) -I/usr/local/include/igraph/ -L/usr/local/lib/ -ligraph -fopenmp
+

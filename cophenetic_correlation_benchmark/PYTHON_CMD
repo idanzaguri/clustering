@@ -1,0 +1,6 @@
+#python3.8 dummy_tree.py 0 >> log0
+python3.8 dummy_tree.py 1 >> log1
+python3.8 dummy_tree.py 2 >> log2
+#python3.8 dummy_tree.py 3 >> log3
+python3.8 dummy_tree.py 4 >> log4
+python3.8 dummy_tree.py 5 >> log5
